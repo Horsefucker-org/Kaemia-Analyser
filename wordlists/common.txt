@@ -1,0 +1,12 @@
+# common directories and files to check
+admin
+login
+administrator
+wp-admin
+config.php
+.git
+backup
+db_backup
+.env
+.env.bak
+backup.zip

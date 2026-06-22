@@ -13,6 +13,10 @@ import socket
 import ssl
 import time
 from urllib.parse import urlparse, urljoin
+import os
+import shutil
+from datetime import datetime
+from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
@@ -166,7 +170,150 @@ def run_all_checks(url, deep=False, timeout=10):
     if deep:
         result["links"] = enumerate_links(soup, resp.url)
 
+    # passive findings collected; aggressive tests not run here
+
     return result
+
+
+def dir_bruteforce(base_url, wordlist=None, timeout=5):
+    # legacy wrapper; kept for backward compatibility
+    return dir_bruteforce_from_list(base_url, wordlist, timeout)
+
+
+def dir_bruteforce_from_list(base_url, wordlist=None, timeout=5):
+    if wordlist is None:
+        default = Path(__file__).parent / 'wordlists' / 'common.txt'
+        if default.exists():
+            wordlist = str(default)
+        else:
+            wordlist = None
+    entries = []
+    if isinstance(wordlist, str):
+        try:
+            with open(wordlist, 'r', encoding='utf-8') as fh:
+                entries = [l.strip() for l in fh if l.strip() and not l.startswith('#')]
+        except Exception:
+            entries = []
+    elif isinstance(wordlist, (list, tuple)):
+        entries = list(wordlist)
+    else:
+        entries = ["admin", "login", "administrator", "wp-admin", "config.php", ".git", "backup", "db_backup"]
+
+    found = []
+    for p in entries:
+        url = urljoin(base_url, p)
+        try:
+            r = requests.get(url, timeout=timeout, allow_redirects=False)
+            if r.status_code in (200, 403, 401):
+                found.append({"path": p, "url": url, "status": r.status_code})
+        except requests.RequestException:
+            continue
+    return found
+
+
+def save_reports(report, out_dir=None):
+    if out_dir is None:
+        base = Path('reports') / datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    else:
+        base = Path(out_dir)
+    base.mkdir(parents=True, exist_ok=True)
+    json_path = base / 'report.json'
+    html_path = base / 'report.html'
+    md_path = base / 'report.md'
+    with open(json_path, 'w', encoding='utf-8') as fh:
+        json.dump(report, fh, indent=2, ensure_ascii=False)
+    generate_html_report(report, str(html_path))
+    generate_markdown_report(report, str(md_path))
+    return {'json': str(json_path), 'html': str(html_path), 'md': str(md_path)}
+
+
+def run_lighthouse_if_available(url, out_dir):
+    # optional integration with lighthouse CLI (node). Only run if available.
+    lh = shutil.which('lighthouse')
+    if not lh:
+        return {'lighthouse': 'not_found', 'message': 'Install Node.js and lighthouse (npm i -g lighthouse) to enable'}
+    out_html = Path(out_dir) / 'lighthouse.html'
+    try:
+        import subprocess
+        subprocess.run([lh, url, '--output', 'html', '--output-path', str(out_html)], check=True)
+        return {'lighthouse': 'ok', 'path': str(out_html)}
+    except Exception as e:
+        return {'lighthouse': 'error', 'error': str(e)}
+
+
+def dir_bruteforce(base_url, wordlist=None, timeout=5):
+    if wordlist is None:
+        wordlist = ["admin", "login", "administrator", "wp-admin", "config.php", ".git", "backup", "db_backup"]
+    found = []
+    for p in wordlist:
+        url = urljoin(base_url, p)
+        try:
+            r = requests.get(url, timeout=timeout, allow_redirects=False)
+            if r.status_code in (200, 403, 401):
+                found.append({"path": p, "url": url, "status": r.status_code})
+        except requests.RequestException:
+            continue
+    return found
+
+
+def test_xss(url, forms, timeout=10):
+    payload = "<script>alert(1)</script>"
+    results = []
+    for f in forms:
+        action = f.get("action") or url
+        method = f.get("method", "get").lower()
+        data = {}
+        for name, _type in f.get("inputs", []):
+            if name:
+                data[name] = payload
+        try:
+            if method == "post":
+                r = requests.post(urljoin(url, action), data=data, timeout=timeout)
+            else:
+                r = requests.get(urljoin(url, action), params=data, timeout=timeout)
+            if payload in r.text:
+                results.append({"form": action, "vulnerable": True})
+            else:
+                results.append({"form": action, "vulnerable": False})
+        except requests.RequestException:
+            results.append({"form": action, "error": "request failed"})
+    return results
+
+
+def test_sqli(url, forms, timeout=10):
+    payload = "' OR '1'='1"
+    errors = ["sql", "mysql", "syntax", "warning", "unterminated string"]
+    results = []
+    for f in forms:
+        action = f.get("action") or url
+        method = f.get("method", "get").lower()
+        data = {}
+        for name, _type in f.get("inputs", []):
+            if name:
+                data[name] = payload
+        try:
+            if method == "post":
+                r = requests.post(urljoin(url, action), data=data, timeout=timeout)
+            else:
+                r = requests.get(urljoin(url, action), params=data, timeout=timeout)
+            text = r.text.lower()
+            found = any(e in text for e in errors)
+            results.append({"form": action, "sqli_error_like": found})
+        except requests.RequestException:
+            results.append({"form": action, "error": "request failed"})
+    return results
+
+
+def check_open_redirects(url, links, timeout=5):
+    # naive check: look for redirect parameters in external links
+    suspect = []
+    for l in links.get('external', [])[:100]:
+        parsed = urlparse(l)
+        for q in ('url', 'next', 'redirect', 'r'):
+            if q in parsed.query:
+                suspect.append(l)
+                break
+    return suspect
 
 
 def print_report(r, explain=False, json_out=None):
@@ -274,6 +421,7 @@ def interactive_menu():
         print('4) JSON report to file')
         print('5) HTML report to file')
         print('6) Markdown report to file')
+        print('8) Aggressive tests (bruteforce, form injection)')
         print('7) Show README')
         print('0) Exit')
         choice = input('> ').strip()
@@ -313,6 +461,19 @@ def interactive_menu():
                     print('\n' + fh.read())
             except Exception as e:
                 print('Could not read README.md:', e)
+        elif choice == '8':
+            confirm = input('Aggressive tests will send many requests and may alter server state. Confirm (yes/no): ').strip().lower()
+            if confirm not in ('y', 'yes'):
+                print('Cancelled')
+                continue
+            r = run_all_checks(url, deep=True)
+            r['aggressive'] = {}
+            r['aggressive']['dir_hits'] = dir_bruteforce(r.get('final_url') or url)
+            r['aggressive']['xss'] = test_xss(r.get('final_url') or url, r.get('forms', []))
+            r['aggressive']['sqli'] = test_sqli(r.get('final_url') or url, r.get('forms', []))
+            if r.get('links'):
+                r['aggressive']['open_redirect_suspects'] = check_open_redirects(r.get('final_url') or url, r.get('links'))
+            print_report(r, explain=True)
         else:
             print('Unknown choice')
 
@@ -325,6 +486,8 @@ def main():
     p.add_argument("--json", help="Write JSON report to file instead of printing")
     p.add_argument("--menu", action="store_true", help="Run interactive menu")
     p.add_argument("--timeout", type=float, default=10.0, help="Request timeout in seconds")
+    p.add_argument("--aggressive", action="store_true", help="Perform aggressive tests (bruteforce, form injection). Use only on sites you own or have permission to test")
+    p.add_argument("--yes", action="store_true", help="Assume yes to confirmation prompts for aggressive actions")
     args = p.parse_args()
 
     if args.menu or not args.url:
@@ -332,6 +495,26 @@ def main():
         return
 
     report = run_all_checks(args.url, deep=args.deep, timeout=args.timeout)
+
+    if args.aggressive:
+        if not args.yes:
+            confirm = input("Aggressive tests will send many requests and may alter server state. Confirm (yes/no): ").strip().lower()
+            if confirm not in ("y", "yes"):
+                print("Aggressive tests cancelled")
+                print_report(report, explain=args.explain, json_out=args.json)
+                return
+        # run aggressive checks
+        print("Running aggressive tests: directory brute-force, form injection tests (XSS/SQLi), open-redirect heuristics")
+        try:
+            report['aggressive'] = {}
+            report['aggressive']['dir_hits'] = dir_bruteforce(report.get('final_url') or args.url)
+            report['aggressive']['xss'] = test_xss(report.get('final_url') or args.url, report.get('forms', []))
+            report['aggressive']['sqli'] = test_sqli(report.get('final_url') or args.url, report.get('forms', []))
+            if report.get('links'):
+                report['aggressive']['open_redirect_suspects'] = check_open_redirects(report.get('final_url') or args.url, report.get('links'))
+        except Exception as e:
+            report['aggressive_error'] = str(e)
+
     print_report(report, explain=args.explain, json_out=args.json)
 
 

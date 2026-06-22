@@ -1,0 +1,18 @@
+[project]
+name = "safety_checker"
+version = "0.1.0"
+description = "Passive webpage safety heuristics and reporting tool"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [ { name = "User" } ]
+requires-python = ">=3.8"
+dependencies = [
+  "requests",
+  "beautifulsoup4",
+]
+
+[project.scripts]
+safety-checker = "safety_checker:main"
+
+[tool.black]
+line-length = 88

@@ -1,0 +1,58 @@
+import requests
+from bs4 import BeautifulSoup
+
+def check_webpage_safety(url):
+    try:
+        # Send an HTTP request to the website
+        response = requests.get(url)
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            print("Website loaded successfully")
+            
+            # Parse the HTML content of the website
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # List of common security vulnerabilities
+            vulnerabilities = [
+                "SQL Injection",
+                "Cross-site Scripting (XSS)",
+                "HTTP Response Splitting (HRS)",
+                "Cookie Poisoning",
+                "Man-in-the-Middle Attacks"
+            ]
+            
+            # Check for each vulnerability
+            for vulnerability in vulnerabilities:
+                if vulnerability in str(soup):
+                    print(f"Vulnerability found: {vulnerability}")
+                else:
+                    print(f"No {vulnerability} found")
+        else:
+            print("Failed to load website. Status code:", response.status_code)
+    except requests.RequestException as e:
+        print("An error occurred:", e)
+
+# Example usage
+check_webpage_safety('https://www.example.com')
+```
+
+### Explanation of the Program:
+
+1. **Importing Libraries**: We import necessary libraries such as `requests` for making HTTP 
+requests and `BeautifulSoup` from `bs4` for parsing HTML.
+2. **Function `check_webpage_safety(url)`**:
+   - It sends an HTTP GET request to the specified URL.
+   - It checks if the request was successful (status code 200).
+   - If successful, it parses the HTML content of the website using BeautifulSoup.
+   - It checks for common security vulnerabilities in the parsed HTML and prints whether 
+each vulnerability is present or not.
+3. **Example Usage**: We call `check_webpage_safety` with a sample URL to demonstrate how 
+the program works.
+
+### How to Use the Program:
+
+1. Save the code to a file, for example, `safety_checker.py`.
+2. Run the script using Python: `python safety_checker.py`.
+3. The program will analyze the specified website and print out any vulnerabilities it 
+finds.

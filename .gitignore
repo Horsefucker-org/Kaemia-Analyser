@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+venv/
+ENV/
+
+# Editor
+.vscode/
+.idea/
+
+# Packages
+*.egg-info/
+.dist-info/
+
+# Pytest
+.pytest_cache/
+
+# OS
+.DS_Store
+
+# Reports
+report.json
+report.html
+report.md

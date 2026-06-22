@@ -1,0 +1,26 @@
+# small curated list from SecLists (subset)
+admin
+administrator
+login
+user
+users
+wp-login.php
+wp-admin
+backup
+backups
+backup.zip
+old
+test
+portal
+config.php
+.env
+.git
+.gitignore
+sitemap.xml
+robots.txt
+uploads
+uploads/2020
+upload
+api
+api/v1
+api/v2

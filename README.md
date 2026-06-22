@@ -37,3 +37,21 @@ Legal / ethical note:
 Aggressive tests:
 
 - The tool now includes an `--aggressive` mode that can perform directory brute-force checks and basic form injection tests (XSS/SQLi heuristics). These are intrusive and may generate many requests or alter server state. Only run `--aggressive` against systems you own or have explicit permission to test. The interactive menu also exposes these options and will ask for confirmation.
+
+Quick install for users (Fedora / Linux)
+
+You can run the included installer which prefers `pipx` (recommended) and falls back to a `pip --user` install. Run from the repo root after cloning:
+
+```bash
+./install.sh
+# or force user-mode:
+./install.sh --method user
+```
+
+After install you can call the CLI directly as `safety-checker`:
+
+```bash
+safety-checker https://example.com --deep --explain
+```
+
+If you plan to publish this repo on GitHub, users will be able to clone and run `./install.sh` or use `pipx install <github-user>/safetychecker` once the package is published.

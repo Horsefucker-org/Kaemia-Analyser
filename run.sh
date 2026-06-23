@@ -41,7 +41,7 @@ except ImportError:
 
 echo -e "\n${GREEN}Starting Safety Checker...${NC}\n"
 
-# Handle arguments
+# Always start interactive menu by default, unless CLI args are provided
 if [ $# -eq 0 ]; then
   python3 safety_checker.py --menu
 else

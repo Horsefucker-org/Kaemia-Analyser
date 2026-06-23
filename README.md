@@ -1,12 +1,93 @@
-# Safety Checker 🛡️
+# 🛡️ Safety Checker - Website Security Scanner
 
-**Professional Website Security Analysis & Penetration Testing Tool**
+**Professional Website Security Analysis & Penetration Testing Tool with Aggressive Hacker Methods**
 
-A comprehensive, production-ready security scanner for analyzing websites with aggressive hacker-grade testing methods. Perfect for security audits, penetration testing, and vulnerability assessment.
+Scan websites for security vulnerabilities: XSS, SQLi, weak headers, CORS misconfigurations, open redirects, and more.
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Production-brightgreen)
+
+---
+
+## ⚡ Quick Start (2 minutes)
+
+### 1️⃣ Clone & Run (All Platforms)
+```bash
+git clone https://github.com/Horsefucker-org/Kaemia-Analyser.git
+cd Kaemia-Analyser
+./run.sh          # Linux/macOS
+# or
+run.bat           # Windows (double-click or run in Command Prompt)
+```
+
+### 2️⃣ Enter Your Website URL
+The **interactive menu** opens automatically:
+```
+═══════════════════════════════════════
+SAFETY CHECKER - Interactive Mode
+═══════════════════════════════════════
+1. Basic scan (passive)
+2. Deep scan (link enumeration)
+3. Aggressive scan (directory brute-force, XSS, SQLi tests)
+4. Full scan (everything)
+5. Exit
+
+Choose option (1-5): 3
+Enter URL (e.g., https://example.com): https://your-website.com
+Aggressive tests will make many requests. Continue? (yes/no): yes
+Running scan...
+```
+
+### 3️⃣ View Results
+```
+[HEADERS]
+Server: nginx
+Missing Security Headers: x-frame-options, content-security-policy
+
+[DIRECTORIES FOUND]
+  admin (403)
+  api (200)
+
+[XSS VULNERABILITIES]
+  Reflected XSS in /search?q=
+
+[SQL INJECTION TESTS]
+  SQL Error Detected in /login
+```
+
+---
+
+## 🎯 Usage Modes
+
+### 📌 Interactive Menu (Recommended - Just run it!)
+```bash
+./run.sh          # Automatically opens interactive menu
+```
+Enter your website URL and choose scan type. That's it!
+
+### 🖥️ Command Line (For Scripting)
+```bash
+# Basic scan
+./run.sh https://example.com
+
+# Deep scan (enumerate links)
+./run.sh https://example.com --deep
+
+# Aggressive scan (XSS, SQLi, Directory Brute-Force)
+./run.sh https://example.com --aggressive
+
+# Full scan (everything)
+./run.sh https://example.com --deep --aggressive
+
+# Save to JSON file
+./run.sh https://example.com --aggressive --json report.json
+
+# Custom timeout (for slow websites)
+./run.sh https://example.com --timeout 30
+```
+
+---
 
 ## Features
 

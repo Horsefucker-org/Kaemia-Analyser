@@ -26,14 +26,14 @@ echo -e "${GREEN}✓ Python ${PYTHON_VERSION} found${NC}"
 
 # Check and install dependencies
 echo -e "\n${YELLOW}Checking dependencies...${NC}"
-python3 - <<'PY' 2>/dev/null
+python3 -c "
 try:
     import requests
     import bs4
-    print("Dependencies OK")
-except ImportError as e:
-    raise SystemExit(1)
-PY || {
+    print('Dependencies OK')
+except ImportError:
+    exit(1)
+" 2>/dev/null || {
   echo -e "${YELLOW}Installing required packages...${NC}"
   python3 -m pip install --user -q -r requirements.txt
   echo -e "${GREEN}✓ Dependencies installed${NC}"

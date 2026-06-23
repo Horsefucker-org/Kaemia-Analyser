@@ -1,0 +1,70 @@
+name: Multi-Platform Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.11']
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build executable (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        pyinstaller --onefile --name safety-checker safety_checker.py
+        ls -la dist/
+
+    - name: Build executable (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        pyinstaller --onefile --windowed --name safety-checker safety_checker.py
+        dir dist\
+
+    - name: Build executable (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        pyinstaller --onefile --name safety-checker safety_checker.py
+        ls -la dist/
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: safety-checker-${{ matrix.os }}
+        path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: artifacts/**/*
+        draft: false
+        prerelease: false

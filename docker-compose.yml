@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  safety-checker:
+    build: .
+    container_name: safety-checker
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./reports:/app/reports
+    command: --menu

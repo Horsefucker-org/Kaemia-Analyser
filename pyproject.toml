@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safety-checker"
+version = "1.0.0"
+description = "Professional Website Security Analysis & Penetration Testing Tool"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Kaemia", email = "dev@kaemia.com"}]
+requires-python = ">=3.8"
+keywords = ["security", "penetration-testing", "web-security", "vulnerability-scanner"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "urllib3>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "isort>=5.0.0",
+]
+
+[project.scripts]
+safety-checker = "safety_checker:main"
+
+[project.urls]
+Homepage = "https://github.com/Kaemia/safetychecker"
+Documentation = "https://github.com/Kaemia/safetychecker#readme"
+Repository = "https://github.com/Kaemia/safetychecker.git"
+Issues = "https://github.com/Kaemia/safetychecker/issues"
+
+[tool.setuptools]
+packages = ["safety_checker"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

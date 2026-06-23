@@ -35,6 +35,54 @@ except Exception:
 
 console = Console() if Console is not None else None
 
+# Safety / sandboxing defaults
+MAX_REQUESTS_PER_SECOND = 5
+DEFAULT_MIN_DELAY = 1.0 / MAX_REQUESTS_PER_SECOND
+
+
+class RateLimiter:
+    """Simple token-bucket-like rate limiter per process.
+
+    Not cryptographically strong; prevents accidental high request rates.
+    """
+
+    def __init__(self, min_delay=DEFAULT_MIN_DELAY):
+        self.min_delay = float(min_delay)
+        self._lock = threading.Lock()
+        self._last = 0.0
+
+    def wait(self):
+        with self._lock:
+            now = time.time()
+            elapsed = now - self._last
+            wait_for = self.min_delay - elapsed
+            if wait_for > 0:
+                time.sleep(wait_for)
+            self._last = time.time()
+
+
+# Global limiter used by all network functions
+_GLOBAL_RATE_LIMITER = RateLimiter()
+
+
+def limited_request(method, url, **kwargs):
+    """Perform a requests call while respecting global rate limits and basic backoff."""
+    # Basic exponential backoff on transient errors
+    backoff = 1
+    for attempt in range(4):
+        _GLOBAL_RATE_LIMITER.wait()
+        try:
+            resp = requests.request(method, url, **kwargs)
+            return resp
+        except requests.RequestException as e:
+            # transient network issue; backoff then retry
+            if attempt < 3:
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            raise
+
+
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
@@ -104,8 +152,7 @@ def fetch(url, timeout=10, verify=False):
     try:
         headers = {"User-Agent": get_random_user_agent()}
         start = time.time()
-        r = requests.get(url, timeout=timeout, allow_redirects=True, 
-                        headers=headers, verify=verify)
+        r = limited_request("GET", url, timeout=timeout, allow_redirects=True, headers=headers, verify=verify)
         elapsed = time.time() - start
         return r, elapsed
     except requests.RequestException as e:
@@ -182,11 +229,11 @@ def check_robots(base_url):
     u = urlparse(base_url)
     robots_url = f"{u.scheme}://{u.netloc}/robots.txt"
     try:
-        r = requests.get(robots_url, timeout=5, headers={"User-Agent": get_random_user_agent()})
+        r = limited_request("GET", robots_url, timeout=5, headers={"User-Agent": get_random_user_agent()})
         if r.status_code == 200:
             return {"exists": True, "content": r.text[:500]}
         return {"exists": False}
-    except:
+    except Exception:
         return {"exists": False}
 
 
@@ -195,11 +242,11 @@ def check_sitemap(base_url):
     u = urlparse(base_url)
     sitemap_url = f"{u.scheme}://{u.netloc}/sitemap.xml"
     try:
-        r = requests.get(sitemap_url, timeout=5, headers={"User-Agent": get_random_user_agent()})
+        r = limited_request("GET", sitemap_url, timeout=5, headers={"User-Agent": get_random_user_agent()})
         if r.status_code == 200:
             return {"exists": True, "urls_count": len(r.text.split("<loc>"))}
         return {"exists": False}
-    except:
+    except Exception:
         return {"exists": False}
 
 
@@ -214,7 +261,7 @@ def dir_brute_force(base_url, timeout=10, max_threads=10):
         try:
             full_url = f"{base}/{path}"
             headers = {"User-Agent": get_random_user_agent()}
-            r = requests.get(full_url, timeout=3, headers=headers, verify=False)
+            r = limited_request("GET", full_url, timeout=3, headers=headers, verify=False)
             if r.status_code in [200, 301, 302, 403]:
                 with lock:
                     found.append({"path": path, "status": r.status_code})
@@ -258,9 +305,9 @@ def test_xss_injection(base_url, forms):
                     continue
                 
                 if method.upper() == "POST":
-                    r = requests.post(action_url, data=data, timeout=5, verify=False)
+                    r = limited_request("POST", action_url, data=data, timeout=5, verify=False)
                 else:
-                    r = requests.get(action_url, params=data, timeout=5, verify=False)
+                    r = limited_request("GET", action_url, params=data, timeout=5, verify=False)
                 
                 if payload in r.text:
                     vulns.append({
@@ -294,9 +341,9 @@ def test_sqli_injection(base_url, forms):
                     continue
                 
                 if method.upper() == "POST":
-                    r = requests.post(action_url, data=data, timeout=5, verify=False)
+                        r = limited_request("POST", action_url, data=data, timeout=5, verify=False)
                 else:
-                    r = requests.get(action_url, params=data, timeout=5, verify=False)
+                        r = limited_request("GET", action_url, params=data, timeout=5, verify=False)
                 
                 # Check for SQL error indicators
                 error_indicators = ["sql", "syntax", "mysql", "postgresql", "database error"]
@@ -364,7 +411,7 @@ def test_cors(base_url):
     """Test CORS misconfiguration"""
     headers = {"User-Agent": get_random_user_agent(), "Origin": "https://attacker.com"}
     try:
-        r = requests.get(base_url, headers=headers, timeout=5, verify=False)
+        r = limited_request("GET", base_url, headers=headers, timeout=5, verify=False)
         cors_origin = r.headers.get("access-control-allow-origin", "")
         cors_creds = r.headers.get("access-control-allow-credentials", "")
         
@@ -391,7 +438,7 @@ def test_default_credentials(base_url):
     found = []
     for user, pwd in defaults:
         try:
-            r = requests.post(base_url, data={"username": user, "password": pwd}, 
+            r = limited_request("POST", base_url, data={"username": user, "password": pwd}, 
                             timeout=5, verify=False)
             if r.status_code == 200 and "success" in r.text.lower():
                 found.append({"username": user, "password": pwd})
@@ -618,6 +665,7 @@ Examples:
     parser.add_argument("url", nargs="?", help="URL to scan")
     parser.add_argument("--deep", action="store_true", help="Deep scan (enumerate links)")
     parser.add_argument("--aggressive", action="store_true", help="Aggressive scan (brute-force, injection tests)")
+    parser.add_argument("--enable-intrusive", action="store_true", help="Enable intrusive tests without additional interactive typed confirmation (use with care)")
     parser.add_argument("--json", help="Output JSON report to file")
     parser.add_argument("--menu", action="store_true", help="Interactive menu mode")
     parser.add_argument("--timeout", type=float, default=10, help="Request timeout (default: 10s)")
@@ -627,6 +675,16 @@ Examples:
     if args.menu or not args.url:
         interactive_menu()
     else:
+        # Extra safety: require explicit consent for intrusive/aggressive tests when run non-interactively
+        intrusive_allowed = args.enable_intrusive or os.getenv("SAFETY_CHECKER_ALLOW_INTRUSIVE") == "1"
+        if args.aggressive and not intrusive_allowed:
+            print("Aggressive tests require explicit enabling for non-interactive runs.")
+            print("Set environment variable SAFETY_CHECKER_ALLOW_INTRUSIVE=1 or pass --enable-intrusive to proceed.")
+            confirm = input("Type 'I UNDERSTAND' to confirm and proceed: ").strip()
+            if confirm != "I UNDERSTAND":
+                print("Aborted: intrusive tests not enabled.")
+                return
+
         report = run_all_checks(args.url, deep=args.deep, aggressive=args.aggressive, timeout=args.timeout)
         print_report(report, json_out=args.json)
 

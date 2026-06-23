@@ -24,6 +24,17 @@ from bs4 import BeautifulSoup
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Rich for clean terminal UI
+try:
+    from rich.console import Console
+    from rich.prompt import Prompt, Confirm
+    from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+except Exception:
+    Console = None
+
+console = Console() if Console is not None else None
+
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
@@ -496,38 +507,100 @@ def print_report(report, explain=False, json_out=None):
 
 
 def interactive_menu():
-    """Interactive menu"""
-    while True:
-        print("\n" + "="*60)
-        print("SAFETY CHECKER - Interactive Mode")
-        print("="*60)
-        print("1. Basic scan (passive)")
-        print("2. Deep scan (link enumeration)")
-        print("3. Aggressive scan (directory brute-force, XSS, SQLi tests)")
-        print("4. Full scan (everything)")
-        print("5. Exit")
-        
-        choice = input("Choose option (1-5): ").strip()
-        
-        if choice == "5":
-            break
-        elif choice in ["1", "2", "3", "4"]:
-            url = input("Enter URL (e.g., https://example.com): ").strip()
+    """Interactive menu using Rich for a clean UI if available."""
+    if console is None:
+        # Fallback to simple CLI if Rich is not installed
+        while True:
+            print("\n" + "=" * 60)
+            print("SAFETY CHECKER - Interactive Mode")
+            print("=" * 60)
+            print("1. Basic scan (passive)")
+            print("2. Deep scan (link enumeration)")
+            print("3. Aggressive scan (directory brute-force, XSS, SQLi tests)")
+            print("4. Full scan (everything)")
+            print("5. Exit")
+
+            choice = input("Choose option (1-5): ").strip()
+
+            if choice == "5":
+                break
+            elif choice in ["1", "2", "3", "4"]:
+                url = input("Enter URL (e.g., https://example.com): ").strip()
+                if not url.startswith("http"):
+                    url = "https://" + url
+
+                deep = choice in ["2", "4"]
+                aggressive = choice in ["3", "4"]
+
+                if aggressive:
+                    confirm = input("Aggressive tests will make many requests. Continue? (yes/no): ").strip()
+                    if confirm.lower() not in ["yes", "y"]:
+                        print("Cancelled")
+                        continue
+
+                print("Running scan...")
+                report = run_all_checks(url, deep=deep, aggressive=aggressive)
+                print_report(report, explain=True)
+    else:
+        while True:
+            console.rule("SAFETY CHECKER - Interactive Mode")
+            console.print("[1] Basic scan (passive)  [2] Deep scan (links)  [3] Aggressive scan  [4] Full scan  [5] Exit", style="bold cyan")
+            try:
+                choice = Prompt.ask("Choose option", choices=["1", "2", "3", "4", "5"], default="1")
+            except Exception:
+                choice = "1"
+
+            if choice == "5":
+                console.print("Goodbye", style="green")
+                break
+
+            url = Prompt.ask("Enter URL (e.g., https://example.com)")
             if not url.startswith("http"):
                 url = "https://" + url
-            
+
             deep = choice in ["2", "4"]
             aggressive = choice in ["3", "4"]
-            
+
             if aggressive:
-                confirm = input("Aggressive tests will make many requests. Continue? (yes/no): ").strip()
-                if confirm.lower() not in ["yes", "y"]:
-                    print("Cancelled")
+                ok = Confirm.ask("Aggressive tests will make many requests and may trigger alerts. Continue?", default=False)
+                if not ok:
+                    console.print("Cancelled", style="yellow")
                     continue
-            
-            print("Running scan...")
-            report = run_all_checks(url, deep=deep, aggressive=aggressive)
-            print_report(report, explain=True)
+
+            console.print(Panel.fit(f"Running scan for: {url}\nDeep: {deep}  Aggressive: {aggressive}", title="Scanning", subtitle="Please wait..."))
+            with console.status("Running checks…", spinner="dots"):
+                report = run_all_checks(url, deep=deep, aggressive=aggressive)
+
+            # Present results
+            if report.get("error"):
+                console.print(f"[red]Error:[/red] {report['error']}")
+            else:
+                console.rule("Scan Results")
+                # Headers summary
+                headers = report.get("headers", {})
+                missing = headers.get("missing", [])
+                console.print(f"Server: {headers.get('server', 'Unknown')}")
+                console.print(f"Missing Security Headers: {', '.join(missing) if missing else 'None'}")
+
+                if report.get("directories"):
+                    console.print(Panel.fit(str(report.get("directories")[:10]), title="Directories found"))
+
+                if report.get("xss_tests"):
+                    console.print(Panel.fit(str(report.get("xss_tests")), title="XSS Findings", style="red"))
+
+                if report.get("sqli_tests"):
+                    console.print(Panel.fit(str(report.get("sqli_tests")), title="SQLi Findings", style="red"))
+
+                # Offer JSON export
+                if Confirm.ask("Save full report to JSON file?", default=False):
+                    fname = Prompt.ask("Filename", default=f"scan_{int(time.time())}.json")
+                    try:
+                        with open(fname, "w") as fh:
+                            json.dump(report, fh, indent=2)
+                        console.print(f"Saved report to [green]{fname}[/green]")
+                    except Exception as e:
+                        console.print(f"Failed to save report: {e}", style="red")
+
 
 
 def main():
